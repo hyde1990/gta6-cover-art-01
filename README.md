@@ -21,10 +21,12 @@ machine, the sunset art is drawn procedurally, and the export is a plain PNG.
   the cover to reposition the photo, or use the zoom / shift sliders.
 - **Poster lettering** — editable caption in bold outlined poster type with a
   neon script subtitle, on a halftone title band.
+- **Backdrop grades** — warm sunset, midnight violet, or black ink.
 - **Sunset / neon grade** — warm gradient map, halftone dots, vignette and
-  grain over a procedural sunset (or midnight-violet / black-ink) backdrop.
+  grain over a procedural sunset (or midnight / ink) backdrop.
 - **PNG export** — 1080×1080, 1080×1350 and 1920×1080, one click.
-- **Undo / redo** — every layout, crop and wording change is reversible.
+- **Undo / redo** — every layout, crop and wording change is reversible
+  (buttons or Ctrl+Z / Ctrl+Y).
 
 ## Run it
 
@@ -52,7 +54,8 @@ driven by the `?shot=` query (`?shot=cover` / `?shot=editor` plus
   halftone, title, vignette, grain)
 - `app/src/main.js` — state, history, controls, drag, export
 - `app/src/shots.js` — fixed scenes for headless screenshots
-- `main.ts` — the make.fun hand-in program (starter, unchanged)
+- `main.ts` — the make.fun hand-in program (checks the four screenshots,
+  then builds the dossier)
 - `serve.ts` — the local static server (starter, unchanged)
 
 ## License

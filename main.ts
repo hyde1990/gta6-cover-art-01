@@ -1,11 +1,19 @@
-// A working gta6-cover-art-01 entry (Node 22, standard library only): the app is this directory's app/ folder, plain
-// static files a desktop browser loads offline (app/index.html and its ES modules, no library and no network
-// request), and the program hands it in. It copies app/ and screenshots/ from beside this file to /output and writes
-// /output/dossier.json, the summary the judge reads, with the vendored make.fun library. Only the plumbing, not the
-// cover art the bounty asks for: Cover Snap, a plain one-photo square cover with a sunset tint and a bold caption,
-// exported as a 1080 x 1080 PNG. Its two sample photos (app/samples/) were made for make.fun with an image model and
-// are free to use. Build your own GTA-style cover maker in its place, put your 3 or 4 PNG or JPEG screenshots in
-// screenshots/ (the first by name is the cover) and run it.
+// Vice Cover Studio — a gta6-cover-art-01 entry (Node 22, standard library only).
+//
+// The app is this directory's app/ folder: plain static files a desktop browser
+// loads offline (app/index.html and its ES modules, no library and no network
+// request). It turns a photo and a caption into GTA 6-style multi-panel cover
+// art in a Vice City neon-sunset look: four layouts (Trio, Duo, Single, Grid
+// 2x2), three photo slots with per-panel crop, zoom and drag, an editable poster
+// caption with a neon script subtitle on a halftone band, and PNG export at
+// 1080x1080, 1080x1350 and 1920x1080. Its two sample photos (app/samples/) were
+// made for make.fun with an image model and are free to use.
+//
+// This program hands the entry in: it copies app/ and screenshots/ from beside
+// this file to /output and writes /output/dossier.json, the summary the judge
+// reads, with the vendored make.fun library. Before copying, it checks that all
+// four screenshots the entry promises are actually present, so a missing shot
+// fails loudly here instead of reaching the judge half-built.
 //
 // Serve it locally with `node serve.ts`, then open http://localhost:8080.
 // Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for /output:
@@ -16,8 +24,24 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildDossier } from './vendor/makefun-app.ts';
 
+// Entry identity, written for this round 4 build: the title the entry is
+// submitted under, and the build's own version stamp.
+const VICE_COVER_STUDIO_TITLE = 'Vice Cover Studio';
+const VICE_COVER_STUDIO_VERSION = '4.0.0';
+// The four screenshots this entry promises, in the order shots.json names them.
+const VICE_COVER_STUDIO_SHOTS = ['1-cover.jpg', '2-editor.jpg', '3-cover.jpg', '4-cover.jpg'];
+
 const here = fileURLToPath(new URL('.', import.meta.url));
 const out = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
+
+// Refuse to hand in a half-built entry: every promised screenshot must exist.
+for (const shot of VICE_COVER_STUDIO_SHOTS) {
+  if (!existsSync(join(here, 'screenshots', shot))) {
+    throw new Error(
+      `${VICE_COVER_STUDIO_TITLE} v${VICE_COVER_STUDIO_VERSION} is missing its screenshot ${shot}`,
+    );
+  }
+}
 
 mkdirSync(out, { recursive: true });
 cpSync(join(here, 'app'), join(out, 'app'), { recursive: true });

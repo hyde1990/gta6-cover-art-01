@@ -1,1 +1,1 @@
-{"description":"Offline GTA-style multi-panel cover maker — Vice Cover Studio, round 3","license":"MIT","name":"vice-cover-studio","scripts":{"serve":"node serve.ts","start":"node main.ts"},"type":"module","version":"3.0.0"}
+{"description":"Offline web app that turns a photo and a caption into GTA 6-style multi-panel cover art, in the Vice City neon-sunset look.","name":"vice-cover-studio","private":true,"scripts":{"start":"node serve.ts"},"type":"module","version":"4.0.0"}

@@ -3,98 +3,74 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="Vice Cover Studio — turn a photo and a caption into GTA-style multi-panel cover art, offline in your browser.">
-<title>Vice Cover Studio — GTA-style cover maker</title>
+<title>Vice Cover Studio</title>
 <link rel="stylesheet" href="./style.css">
 </head>
 <body>
-<main class="studio">
-  <header class="topbar">
-    <div>
-      <h1>VICE COVER STUDIO</h1>
-      <p class="tagline">Turn any photo into a neon-sunset multi-panel cover. Fully offline — your photos never leave this machine.</p>
-    </div>
-    <div class="top-actions">
-      <button id="undo" type="button" title="Undo (Ctrl+Z)">Undo</button>
-      <button id="redo" type="button" title="Redo (Ctrl+Y)">Redo</button>
-    </div>
-  </header>
+<main class="app">
+  <section class="controls">
+    <h1>Vice Cover Studio</h1>
+    <p class="tagline">Turn a photo and a caption into GTA 6-style multi-panel cover art, in the Vice City neon-sunset look. Everything runs offline in your browser.</p>
 
-  <div class="workspace">
-    <section class="panel controls" aria-label="Cover controls">
-      <h2>1 · Layout</h2>
-      <div class="row" id="layoutRow" role="group" aria-label="Layout">
-        <button type="button" data-layout="trio" class="picked">Trio</button>
+    <div class="group">
+      <span class="label">Layout</span>
+      <div class="row">
+        <button type="button" data-layout="trio" class="active">Trio</button>
         <button type="button" data-layout="duo">Duo</button>
         <button type="button" data-layout="single">Single</button>
-        <button type="button" data-layout="grid">Grid 2×2</button>
+        <button type="button" data-layout="grid">Grid 2&times;2</button>
       </div>
+    </div>
 
-      <h2>2 · Photos</h2>
-      <p class="hint">Click a panel on the cover to select it, or pick a slot below. Drag a panel to move its photo; use zoom to tighten the crop.</p>
-      <div class="row" id="slotRow" role="group" aria-label="Photo slot">
-        <button type="button" data-slot="0" class="picked">Slot 1</button>
-        <button type="button" data-slot="1">Slot 2</button>
-        <button type="button" data-slot="2">Slot 3</button>
+    <div class="group">
+      <span class="label">Backdrop grade</span>
+      <div class="row">
+        <button type="button" data-grade="sunset" class="active">Sunset</button>
+        <button type="button" data-grade="midnight">Midnight</button>
+        <button type="button" data-grade="ink">Ink</button>
       </div>
-      <label class="field">Photo source
-        <select id="source">
-          <option value="samples/boulevard.jpg">Sample — Boulevard</option>
-          <option value="samples/pier.jpg">Sample — Pier</option>
-          <option value="sunset">Procedural sunset art</option>
-          <option value="upload">Upload my own photo…</option>
-        </select>
-      </label>
-      <label class="field">Upload a photo
+    </div>
+
+    <div class="group">
+      <span class="label" id="slot-label">Panel 1 — pier</span>
+      <div class="row">
+        <button type="button" data-slot-kind="boulevard">Boulevard</button>
+        <button type="button" data-slot-kind="pier">Pier</button>
+        <button type="button" data-slot-kind="procedural">Sunset art</button>
+      </div>
+      <label class="upload">Upload your own photo
         <input id="upload" type="file" accept="image/*">
       </label>
-      <label class="field">Zoom <span id="zoomVal">1.15×</span>
-        <input id="zoom" type="range" min="1" max="2.5" step="0.05" value="1.15">
-      </label>
-      <label class="field">Move sideways
-        <input id="shiftX" type="range" min="-0.4" max="0.4" step="0.01" value="0">
-      </label>
-      <label class="field">Move up / down
-        <input id="shiftY" type="range" min="-0.4" max="0.4" step="0.01" value="0">
-      </label>
-      <button id="resetCrop" type="button" class="ghost">Reset this panel's crop</button>
+      <p class="hint">Click a panel on the cover to select it, then drag it to pan the photo.</p>
+    </div>
 
-      <h2>3 · Words</h2>
-      <label class="field">Caption
-        <input id="caption" type="text" maxlength="28" value="VICE CITY">
-      </label>
-      <label class="field">Neon subtitle
-        <input id="subtitle" type="text" maxlength="48" value="neon nights in leonida">
-      </label>
-      <label class="field">Background behind the panels
-        <select id="backdrop">
-          <option value="sunset">Procedural sunset</option>
-          <option value="night">Midnight violet</option>
-          <option value="ink">Black ink</option>
-        </select>
-      </label>
+    <div class="group sliders">
+      <label>Zoom <input id="zoom" type="range" min="1" max="2.5" step="0.05" value="1"></label>
+      <label>Shift X <input id="shiftx" type="range" min="-5" max="5" step="0.1" value="0"></label>
+      <label>Shift Y <input id="shifty" type="range" min="-5" max="5" step="0.1" value="0"></label>
+    </div>
 
-      <h2>4 · Export</h2>
-      <label class="field">Export size
-        <select id="size">
-          <option value="1080x1080">Square 1080 × 1080</option>
-          <option value="1080x1350">Portrait 1080 × 1350</option>
-          <option value="1920x1080">Wide 1920 × 1080</option>
-        </select>
-      </label>
-      <button id="export" type="button" class="primary">Export PNG</button>
-      <p id="status" role="status">Ready.</p>
-    </section>
+    <div class="group">
+      <label>Caption <input id="caption" type="text" maxlength="40" value="Sunset Heist"></label>
+      <label>Subtitle <input id="subtitle" type="text" maxlength="40" value="Vice City Nights"></label>
+    </div>
 
-    <section class="stage" aria-label="Cover preview">
-      <canvas id="cover" width="1080" height="1080" aria-label="The cover art"></canvas>
-      <p class="hint">Tip: drag on the cover to reposition the selected photo. Undo is Ctrl+Z, redo Ctrl+Y. The caption sits on a halftone band at the foot of the poster.</p>
-    </section>
-  </div>
+    <div class="group">
+      <span class="label">Export PNG</span>
+      <div class="row">
+        <button type="button" data-export="1080x1080">1080&times;1080</button>
+        <button type="button" data-export="1080x1350">1080&times;1350</button>
+        <button type="button" data-export="1920x1080">1920&times;1080</button>
+      </div>
+    </div>
 
-  <footer class="foot">
-    <span>Original art, drawn in your browser. No network requests, no uploads, no logos borrowed from anyone.</span>
-  </footer>
+    <div class="row">
+      <button id="undo" type="button" disabled>Undo</button>
+      <button id="redo" type="button" disabled>Redo</button>
+    </div>
+    <p id="status" role="status"></p>
+  </section>
+  <canvas id="cover" width="1080" height="1080" aria-label="The cover"></canvas>
 </main>
 <script type="module" src="./src/main.js"></script>
 </body>
