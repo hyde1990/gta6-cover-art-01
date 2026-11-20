@@ -1,10 +1,10 @@
-// Vice Cover Studio round 5 — the WebGL2 grade pipeline.
+// Vice Cover Studio round 6 — the WebGL2 grade pipeline.
 //
 // The 2D engine (cover.js) paints the cover's base image; this module runs
 // it through the GPU: bright-pass + blur for the neon bloom, then one
-// composite shader for the sunset grade, halftone band, film grain, the
-// drifting light sweep and the vignette. The preview animates (uTime moves);
-// exports freeze uTime at 0, so the PNG is byte-stable.
+// composite shader for the grade, halftone band, film grain, the drifting
+// light sweep, the vignette and the data particles. The preview animates
+// (uTime moves); exports freeze uTime at 0, so the PNG is byte-stable.
 //
 // No WebGL2 (old browser, headless without GL)? The caller falls back to
 // cover.js's applyFallbackGrade instead — the app still works.
@@ -19,13 +19,15 @@ export function webgl2Available() {
   }
 }
 
+// Grade names in the same order the composite shader expects them.
 export function gradeIndex(grade) {
   if (grade === 'midnight') return 1;
   if (grade === 'ink') return 2;
+  if (grade === 'neon') return 3;
   return 0;
 }
 
-function compile(gl, type, src) {
+function compileShader(gl, type, src) {
   const sh = gl.createShader(type);
   gl.shaderSource(sh, src);
   gl.compileShader(sh);
@@ -37,8 +39,8 @@ function compile(gl, type, src) {
 
 function linkProgram(gl, fragSrc) {
   const prog = gl.createProgram();
-  gl.attachShader(prog, compile(gl, gl.VERTEX_SHADER, VERT_SRC));
-  gl.attachShader(prog, compile(gl, gl.FRAGMENT_SHADER, fragSrc));
+  gl.attachShader(prog, compileShader(gl, gl.VERTEX_SHADER, VERT_SRC));
+  gl.attachShader(prog, compileShader(gl, gl.FRAGMENT_SHADER, fragSrc));
   gl.linkProgram(prog);
   if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
     throw new Error(`Vice Cover Studio program failed: ${gl.getProgramInfoLog(prog)}`);
@@ -184,7 +186,7 @@ export class GradePipeline {
     gl.uniform1i(gl.getUniformLocation(this.compProg, 'uBloom'), 1);
     gl.uniform1f(gl.getUniformLocation(this.compProg, 'uTime'), opts.time || 0);
     gl.uniform1f(gl.getUniformLocation(this.compProg, 'uGlow'), opts.glow ?? 0.7);
-    gl.uniform1i(gl.getUniformLocation(this.compProg, 'uGrade'), gradeIndex(opts.grade || 'sunset'));
+    gl.uniform1i(gl.getUniformLocation(this.compProg, 'uGrade'), gradeIndex(opts.grade || 'neon'));
     gl.uniform1f(gl.getUniformLocation(this.compProg, 'uSweep'), opts.sweep ? 1 : 0);
     gl.uniform2f(gl.getUniformLocation(this.compProg, 'uSize'), w, h);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);

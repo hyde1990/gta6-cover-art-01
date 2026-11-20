@@ -3,14 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Vice Cover Studio</title>
+<title>Vice Cover Studio — Simian Cyber World</title>
 <link rel="stylesheet" href="./style.css">
 </head>
 <body>
 <main class="app">
   <section class="controls">
     <h1>Vice Cover Studio</h1>
-    <p class="tagline">Turn a photo and a caption into GTA 6-style multi-panel cover art, in the Vice City neon-sunset look. WebGL2 bloom, chrome lettering and a drifting sunset light — everything runs offline in your browser.</p>
+    <p class="tagline">Turn a photo and a caption into GTA 6-style multi-panel cover art — now in the Simian Cyber World: a neon jungle city ruled by Simian Prime, chrome apes, holo bananas and cable lianas. WebGL2 bloom, chrome lettering and drifting data particles — everything runs offline in your browser.</p>
 
     <div class="group">
       <span class="label">Layout</span>
@@ -26,23 +26,25 @@
     <div class="group">
       <span class="label">Backdrop grade</span>
       <div class="row">
-        <button type="button" data-grade="sunset" class="active">Sunset</button>
+        <button type="button" data-grade="neon" class="active">Neon jungle</button>
+        <button type="button" data-grade="sunset">Sunset</button>
         <button type="button" data-grade="midnight">Midnight</button>
         <button type="button" data-grade="ink">Ink</button>
       </div>
     </div>
 
     <div class="group">
-      <span class="label" id="slot-label">Panel 1 — pier</span>
+      <span class="label" id="slot-label">Panel 1 — simian</span>
       <div class="row">
+        <button type="button" data-slot-kind="simian">Simian Prime</button>
+        <button type="button" data-slot-kind="procedural">Cyber jungle</button>
         <button type="button" data-slot-kind="boulevard">Boulevard</button>
         <button type="button" data-slot-kind="pier">Pier</button>
-        <button type="button" data-slot-kind="procedural">Sunset art</button>
       </div>
       <label class="upload">Upload your own photo
         <input id="upload" type="file" accept="image/*">
       </label>
-      <p class="hint">Click a panel on the cover to select it, then drag it to pan the photo.</p>
+      <p class="hint">Click a panel on the cover to select it, then drag it to pan the photo. One photo can fill several panels.</p>
     </div>
 
     <div class="group sliders">
@@ -50,12 +52,12 @@
       <label>Shift X <input id="shiftx" type="range" min="-5" max="5" step="0.1" value="0"></label>
       <label>Shift Y <input id="shifty" type="range" min="-5" max="5" step="0.1" value="0"></label>
       <label>Neon glow <input id="glow" type="range" min="0" max="1" step="0.05" value="0.7"></label>
-      <label class="check"><input id="sweep" type="checkbox" checked> Drifting sunset light</label>
+      <label class="check"><input id="sweep" type="checkbox" checked> Drifting jungle light</label>
     </div>
 
     <div class="group">
-      <label>Caption <input id="caption" type="text" maxlength="40" value="Vice City"></label>
-      <label>Subtitle <input id="subtitle" type="text" maxlength="40" value="Neon Nights"></label>
+      <label>Caption <input id="caption" type="text" maxlength="40" value="Simian City"></label>
+      <label>Subtitle <input id="subtitle" type="text" maxlength="40" value="Cyber Jungle Nights"></label>
     </div>
 
     <div class="group">

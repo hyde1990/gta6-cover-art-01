@@ -1,10 +1,17 @@
-// Vice Cover Studio round 5 — pure layout, caption and slot rules.
+// Vice Cover Studio round 6 — pure layout, caption and slot rules.
 // No DOM here, so Node tests can import this module directly; the browser
 // engine (cover.js / main.js) imports the same functions.
+// Round 6 adds the fourth grade, neon: the chrome-green + magenta look of
+// the Simian Cyber World, and makes it the default backdrop.
 export const LAYOUT_NAMES = ['trio', 'duo', 'single', 'grid', 'slash'];
 
 // The three common post sizes the bounty asks for, in export order.
 export const EXPORT_SIZES = [[1080, 1080], [1080, 1350], [1920, 1080]];
+
+// Backdrop grades. neon is the Simian Cyber World grade: chrome green
+// against magenta, with cyan data light. sunset stays warm, midnight
+// stays violet, ink stays silver.
+export const GRADE_NAMES = ['sunset', 'midnight', 'ink', 'neon'];
 
 // Axis-aligned cells carry x/y/w/h; the slash layout carries a polygon
 // instead, so its two panels meet on a slanted neon edge.
@@ -62,8 +69,8 @@ export function cellBounds(cell) {
   return { x: x0, y: y0, w: Math.max(...xs) - x0, h: Math.max(...ys) - y0 };
 }
 
-export const DEFAULT_CAPTION = 'VICE CITY';
-export const DEFAULT_SUBTITLE = 'Vice City Nights';
+export const DEFAULT_CAPTION = 'SIMIAN CITY';
+export const DEFAULT_SUBTITLE = 'Cyber Jungle Nights';
 
 function tidyWords(text, fallback) {
   const clean = String(text ?? '').replace(/\s+/g, ' ').trim();

@@ -1,13 +1,13 @@
-// Vice Cover Studio round 5 — headless screenshot + probe driver (dev tooling
-// only; NOT part of the handed-in app, main.ts never copies it to /output).
-// Reads shots.json, serves app/ with serve.ts, screenshots each fixed scene
-// with Playwright Chromium, and (with --probe) checks the edge cases:
-// empty/long captions, all three export sizes, export determinism, WebGL2
-// presence and zero non-local network requests.
+// Vice Cover Studio round 6 — headless screenshot + probe driver (dev
+// tooling only; NOT part of the handed-in app, main.ts never copies it to
+// /output). Reads shots.json, serves app/ with serve.ts, screenshots each
+// fixed scene with Playwright Chromium, and (with --probe) checks the edge
+// cases: empty/long captions, all three export sizes, export determinism,
+// WebGL2 presence and zero non-local network requests.
 // Run: node tools/shots-driver.mjs [--probe]
 import { createRequire } from 'node:module';
 import { spawn } from 'node:child_process';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -16,13 +16,13 @@ const { chromium } = require('playwright-core');
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repo = join(here, '..');
-const PORT = 8091;
+const PORT = 8092;
 const BASE = `http://localhost:${PORT}`;
 const PROBE = process.argv.includes('--probe');
 
 const shots = JSON.parse(readFileSync(join(repo, 'shots.json'), 'utf8'));
 
-function pngSize(dataUrl) {
+function pngDims(dataUrl) {
   const buf = Buffer.from(dataUrl.split(',')[1], 'base64');
   if (buf.subarray(1, 4).toString() !== 'PNG') return null;
   return { w: buf.readUInt32BE(16), h: buf.readUInt32BE(20), bytes: buf.length };
@@ -81,7 +81,7 @@ try {
     page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
     page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
     page.on('request', (r) => requests.push(r.url()));
-    await page.goto(`${BASE}/?shot=cover&layout=slash&photo=pier&caption=%20`, { waitUntil: 'load', timeout: 30000 });
+    await page.goto(`${BASE}/?shot=cover&layout=slash&slot0=simian&caption=%20`, { waitUntil: 'load', timeout: 30000 });
     await page.waitForFunction(() => window.__shotReady === true, null, { timeout: 20000 });
     const probe = await page.evaluate(async () => {
       const out = {};
@@ -99,11 +99,11 @@ try {
         const b = window.__exportCover(w, h);
         out.exports[`${w}x${h}`] = { len: a.length, deterministic: a === b, prefix: a.slice(0, 22) };
       }
-      // No-photo cover: every slot procedural, empty subtitle.
+      // No-photo cover: every slot procedural/simian, empty subtitle.
       window.__viceStudio.applyState({
         ...window.__viceStudio.getState(),
         slots: [
-          { kind: 'procedural', zoom: 1, dx: 0, dy: 0 },
+          { kind: 'simian', zoom: 1, dx: 0, dy: 0 },
           { kind: 'procedural', zoom: 1, dx: 0, dy: 0 },
           { kind: 'procedural', zoom: 1, dx: 0, dy: 0 },
         ],
@@ -122,7 +122,7 @@ try {
     for (const [size, e] of Object.entries(probe.exports)) {
       if (!e.deterministic) fail(`probe: export ${size} not deterministic`);
       if (e.prefix !== 'data:image/png;base64,') fail(`probe: export ${size} is not a PNG data URL`);
-      const dims = pngSize(await page.evaluate(([w, h]) => window.__exportCover(w, h), size.split('x').map(Number)));
+      const dims = pngDims(await page.evaluate(([w, h]) => window.__exportCover(w, h), size.split('x').map(Number)));
       if (!dims || dims.w !== Number(size.split('x')[0]) || dims.h !== Number(size.split('x')[1])) {
         fail(`probe: export ${size} PNG header dims wrong: ${JSON.stringify(dims)}`);
       }

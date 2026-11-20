@@ -1,115 +1,48 @@
-// Vice Cover Studio round 5 — the 2D composition engine.
+// Vice Cover Studio round 6 — the 2D composition engine.
 //
-// This paints the cover's base image on a plain canvas: a procedural sunset
-// (or midnight / ink) backdrop, the layout's photo panels with per-panel crop
-// + zoom + pan, a chrome poster caption and a neon subtitle on the title band.
-// The GPU grade (bloom, halftone, grain, light sweep, vignette) runs on top
-// of this in glfx.js; when WebGL2 is missing, applyFallbackGrade gives a
-// lighter 2D version of the same finish.
+// This paints the cover's base image on a plain canvas: a cyber-jungle
+// backdrop (hologram towers, cable lianas, holo banana), the layout's
+// photo panels with per-panel crop + zoom + pan, the Simian Prime hero
+// portrait for procedural hero slots, a chrome poster caption and a neon
+// subtitle on the title band. The GPU grade (bloom, halftone, grain,
+// light sweep, data particles, vignette) runs on top of this in glfx.js;
+// when WebGL2 is missing, applyFallbackGrade gives a lighter 2D version
+// of the same finish.
 //
 // No network, no downloaded fonts: only system fonts and canvas gradients.
+// The chimp is drawn by hand in simian.js — no photo, no borrowed art.
 import { layoutCells, cellsFor, cellBounds, fitCaption, fitSubtitle, clampSlot } from './geometry.js';
+import { drawSimian, drawCyberJungle, mulberry32 } from './simian.js';
 
 export { layoutCells, cellsFor };
 
-const BACKDROPS = {
-  sunset: {
-    sky: ['#2b0f4d', '#7b1e6e', '#e0396b', '#ff7a3d', '#ffc46b'],
-    sun: '#ffe9a8',
-    glow: 'rgba(255, 122, 61, 0.55)',
-    ground: '#160a2e',
-    band: '#12081f',
-    tint: 'rgba(255, 110, 60, 0.10)',
-  },
-  midnight: {
-    sky: ['#050510', '#141433', '#2b2a6b', '#5b3a9e', '#8a4fb8'],
-    sun: '#dfe6ff',
-    glow: 'rgba(120, 110, 255, 0.45)',
-    ground: '#0a0a18',
-    band: '#080816',
-    tint: 'rgba(80, 60, 220, 0.08)',
-  },
-  ink: {
-    sky: ['#000000', '#101010', '#242424', '#3d3d3d', '#5a5a5a'],
-    sun: '#f2f2f2',
-    glow: 'rgba(255, 255, 255, 0.28)',
-    ground: '#000000',
-    band: '#050505',
-    tint: 'rgba(255, 255, 255, 0.04)',
-  },
+// Warm tint washed over the whole cover in the 2D fallback, per grade.
+const BACKDROP_TINT = {
+  sunset: 'rgba(255, 110, 60, 0.10)',
+  midnight: 'rgba(80, 60, 220, 0.08)',
+  ink: 'rgba(255, 255, 255, 0.04)',
+  neon: 'rgba(57, 255, 136, 0.07)',
 };
 
-// Deterministic pseudo-random numbers so screenshots are stable run to run.
-function mulberry32(seed) {
-  let a = seed >>> 0;
-  return function () {
-    a |= 0;
-    a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
+// The neon edge colour of the slash cut, per grade.
+const EDGE_COLOR = {
+  sunset: '#ff2ea6',
+  midnight: '#8a4fb8',
+  ink: '#e8e8e8',
+  neon: '#39ff88',
+};
 
-function drawSkyline(ctx, w, h, color, seed) {
-  const rnd = mulberry32(seed);
-  ctx.fillStyle = color;
-  const base = h * 0.78;
-  let x = 0;
-  while (x < w) {
-    const bw = w * (0.04 + rnd() * 0.07);
-    const bh = h * (0.06 + rnd() * 0.16);
-    ctx.fillRect(x, base - bh, bw, bh + h * 0.22);
-    if (rnd() > 0.5) {
-      ctx.fillStyle = 'rgba(255, 214, 130, 0.85)';
-      ctx.fillRect(x + bw * 0.3, base - bh + bh * 0.3, 2, 3);
-      ctx.fillStyle = color;
-    }
-    x += bw + w * 0.008;
-  }
-}
-
-function drawSun(ctx, w, h, palette) {
-  const cx = w * 0.5;
-  const cy = h * 0.52;
-  const r = Math.min(w, h) * 0.17;
-  const glow = ctx.createRadialGradient(cx, cy, r * 0.2, cx, cy, r * 2.2);
-  glow.addColorStop(0, palette.glow);
-  glow.addColorStop(1, 'rgba(0,0,0,0)');
-  ctx.fillStyle = glow;
-  ctx.fillRect(0, 0, w, h);
-  const disc = ctx.createLinearGradient(cx, cy - r, cx, cy + r);
-  disc.addColorStop(0, palette.sun);
-  disc.addColorStop(1, '#ff9d5c');
-  ctx.fillStyle = disc;
-  ctx.beginPath();
-  ctx.arc(cx, cy, r, 0, Math.PI * 2);
-  ctx.fill();
-  // Retro slats across the lower half of the sun.
-  ctx.save();
-  ctx.beginPath();
-  ctx.arc(cx, cy, r, 0, Math.PI * 2);
-  ctx.clip();
-  ctx.fillStyle = palette.sky[1];
-  let y = cy + r * 0.05;
-  let gap = 3;
-  while (y < cy + r) {
-    ctx.fillRect(cx - r, y, r * 2, gap);
-    y += gap + 9;
-    gap += 3;
-  }
-  ctx.restore();
-}
+// Chrome-foil stops for the poster caption, per grade. Neon — the Simian
+// grade — runs chrome green through cyan into magenta.
+const FOIL_STOPS = {
+  sunset: [[0, '#ffffff'], [0.28, '#ffe9a8'], [0.48, '#ffb347'], [0.62, '#ff4d6d'], [0.8, '#c62b8a'], [1, '#7b1e6e']],
+  midnight: [[0, '#ffffff'], [0.3, '#dfe6ff'], [0.55, '#8a4fb8'], [0.8, '#5b3a9e'], [1, '#2b2a6b']],
+  ink: [[0, '#ffffff'], [0.35, '#e8e8e8'], [0.6, '#b0b0b0'], [1, '#5a5a5a']],
+  neon: [[0, '#ffffff'], [0.25, '#c8ffe2'], [0.45, '#39ff88'], [0.62, '#22d3ee'], [0.82, '#ff2ea6'], [1, '#7b1e6e']],
+};
 
 export function drawBackdrop(ctx, w, h, grade) {
-  const p = BACKDROPS[grade] || BACKDROPS.sunset;
-  const sky = ctx.createLinearGradient(0, 0, 0, h);
-  p.sky.forEach((c, i) => sky.addColorStop(i / (p.sky.length - 1), c));
-  ctx.fillStyle = sky;
-  ctx.fillRect(0, 0, w, h);
-  drawSun(ctx, w, h, p);
-  drawSkyline(ctx, w, h, p.ground, 41);
-  drawSkyline(ctx, w, h, p.band, 97);
+  drawCyberJungle(ctx, w, h, grade || 'neon', 41, 0);
 }
 
 function clipCell(ctx, cell, w, h) {
@@ -150,48 +83,59 @@ function drawPhotoCell(ctx, cell, w, h, img, slot, mirror) {
   ctx.restore();
 }
 
-function drawProceduralCell(ctx, cell, w, h, grade, seed) {
+// A procedural panel: the cyber jungle on its own…
+function drawJungleCell(ctx, cell, w, h, grade, seed) {
   const b = cellBounds(cell);
   ctx.save();
   clipCell(ctx, cell, w, h);
   ctx.translate(b.x * w, b.y * h);
-  drawBackdrop(ctx, b.w * w, b.h * h, grade);
-  // A palm silhouette: a curved trunk with fronds that arc out and droop.
-  const rnd = mulberry32(seed);
+  drawCyberJungle(ctx, b.w * w, b.h * h, grade, seed, 0);
+  ctx.restore();
+}
+
+// …or with Simian Prime himself standing in it, the hero portrait.
+// A diagonal panel frames the face on its polygon centroid (scaled down
+// a little), so the slash cut never eats the head or the chest badge;
+// a rectangular panel keeps the default centred framing.
+function polyCentroid(poly) {
+  let a2 = 0;
+  let cx = 0;
+  let cy = 0;
+  for (let i = 0; i < poly.length; i++) {
+    const [x0, y0] = poly[i];
+    const [x1, y1] = poly[(i + 1) % poly.length];
+    const cross = x0 * y1 - x1 * y0;
+    a2 += cross;
+    cx += (x0 + x1) * cross;
+    cy += (y0 + y1) * cross;
+  }
+  if (Math.abs(a2) < 1e-9) return { x: 0.5, y: 0.5 };
+  return { x: cx / (3 * a2), y: cy / (3 * a2) };
+}
+
+function drawSimianCell(ctx, cell, w, h, grade, seed) {
+  const b = cellBounds(cell);
+  ctx.save();
+  clipCell(ctx, cell, w, h);
+  ctx.translate(b.x * w, b.y * h);
   const pw = b.w * w;
   const ph = b.h * h;
-  const crownX = pw * 0.66;
-  const crownY = ph * 0.38;
-  ctx.strokeStyle = 'rgba(10, 4, 24, 0.92)';
-  ctx.lineCap = 'round';
-  ctx.lineWidth = Math.max(4, pw * 0.022);
-  ctx.beginPath();
-  ctx.moveTo(pw * 0.86, ph);
-  ctx.quadraticCurveTo(pw * 0.84, ph * 0.62, crownX, crownY);
-  ctx.stroke();
-  ctx.lineWidth = Math.max(2, pw * 0.008);
-  const fronds = 6;
-  for (let i = 0; i < fronds; i++) {
-    const a = Math.PI * (1.08 + (i / (fronds - 1)) * 0.84);
-    const len = pw * (0.3 + rnd() * 0.08);
-    const tipX = crownX + Math.cos(a) * len;
-    const tipY = crownY + Math.sin(a) * ph * 0.22 + ph * 0.16;
-    const ctrlX = crownX + Math.cos(a) * len * 0.55;
-    const ctrlY = crownY + Math.sin(a) * ph * 0.3 - ph * 0.05;
-    ctx.beginPath();
-    ctx.moveTo(crownX, crownY);
-    ctx.quadraticCurveTo(ctrlX, ctrlY, tipX, tipY);
-    ctx.stroke();
+  drawCyberJungle(ctx, pw, ph, grade, seed, 0);
+  let view;
+  if (cell.poly) {
+    const c = polyCentroid(cell.poly);
+    view = { cx: c.x * pw, cy: c.y * ph, scale: 0.78 };
   }
+  drawSimian(ctx, pw, ph, grade, seed, 0, view);
   ctx.restore();
 }
 
 // Chrome-foil poster lettering: the caption is painted once on a small
 // offscreen canvas, so the specular stripe only ever lands on the letters.
-function chromeCaption(ctx, w, h, caption, subtitle) {
+function chromeCaption(ctx, w, h, caption, subtitle, grade) {
   const bandH = h * 0.17;
   const y0 = h - bandH;
-  ctx.fillStyle = 'rgba(14, 6, 26, 0.92)';
+  ctx.fillStyle = 'rgba(10, 4, 26, 0.92)';
   ctx.fillRect(0, y0, w, bandH);
 
   const capSize = Math.min(w * 0.085, bandH * 0.52);
@@ -206,14 +150,11 @@ function chromeCaption(ctx, w, h, caption, subtitle) {
   const cx = w / 2;
   const cy = bandH * 0.34;
   const foil = t.createLinearGradient(0, cy - capSize / 2, 0, cy + capSize / 2);
-  foil.addColorStop(0, '#ffffff');
-  foil.addColorStop(0.28, '#ffe9a8');
-  foil.addColorStop(0.48, '#ffb347');
-  foil.addColorStop(0.62, '#ff4d6d');
-  foil.addColorStop(0.8, '#c62b8a');
-  foil.addColorStop(1, '#7b1e6e');
+  for (const [stop, color] of FOIL_STOPS[grade] || FOIL_STOPS.neon) {
+    foil.addColorStop(stop, color);
+  }
   t.lineWidth = capSize * 0.16;
-  t.strokeStyle = '#12081f';
+  t.strokeStyle = '#0a041a';
   t.strokeText(caption, cx, cy);
   t.fillStyle = foil;
   t.fillText(caption, cx, cy);
@@ -237,7 +178,7 @@ function chromeCaption(ctx, w, h, caption, subtitle) {
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.font = `italic bold ${subSize}px "Brush Script MT", "Segoe Script", cursive`;
-  ctx.shadowColor = '#ff2ea6';
+  ctx.shadowColor = grade === 'neon' ? '#39ff88' : '#ff2ea6';
   ctx.shadowBlur = subSize * 0.55;
   ctx.fillStyle = '#ffe9fb';
   ctx.fillText(subtitle, cx, y0 + bandH * 0.78);
@@ -265,18 +206,18 @@ function grainPattern(ctx) {
   return ctx.createPattern(grainTile, 'repeat');
 }
 
-// Fallback finish for browsers without WebGL2: warm tint, vignette, grain.
+// Fallback finish for browsers without WebGL2: tint, vignette, grain.
 export function applyFallbackGrade(ctx, w, h, grade) {
-  const p = BACKDROPS[grade] || BACKDROPS.sunset;
-  ctx.fillStyle = p.tint;
+  const g = grade || 'neon';
+  ctx.fillStyle = BACKDROP_TINT[g] || BACKDROP_TINT.neon;
   ctx.fillRect(0, 0, w, h);
-  const g = ctx.createRadialGradient(
+  const vg = ctx.createRadialGradient(
     w / 2, h / 2, Math.min(w, h) * 0.35,
     w / 2, h / 2, Math.max(w, h) * 0.75,
   );
-  g.addColorStop(0, 'rgba(0,0,0,0)');
-  g.addColorStop(1, 'rgba(8,2,20,0.5)');
-  ctx.fillStyle = g;
+  vg.addColorStop(0, 'rgba(0,0,0,0)');
+  vg.addColorStop(1, 'rgba(8,2,20,0.5)');
+  ctx.fillStyle = vg;
   ctx.fillRect(0, 0, w, h);
   ctx.fillStyle = grainPattern(ctx);
   ctx.fillRect(0, 0, w, h);
@@ -284,13 +225,16 @@ export function applyFallbackGrade(ctx, w, h, grade) {
 
 // state: { layout, slots:[{kind, zoom, dx, dy}], caption, subtitle, grade, glow }
 // images: { boulevard: HTMLImageElement, pier: HTMLImageElement, uploads: Map }
+// Slot kinds: boulevard / pier / upload (photos), procedural (cyber jungle),
+// simian (Simian Prime hero portrait over the jungle).
 export function drawCoverBase(ctx, w, h, state, images) {
+  const grade = state.grade || 'neon';
   ctx.clearRect(0, 0, w, h);
-  drawBackdrop(ctx, w, h, state.grade || 'sunset');
+  drawBackdrop(ctx, w, h, grade);
   const cells = layoutCells(state.layout);
   const slotIdx = cellsFor(state.layout);
   cells.forEach((cell, i) => {
-    const slot = state.slots[slotIdx[i]] || { kind: 'procedural', zoom: 1, dx: 0, dy: 0 };
+    const slot = state.slots[slotIdx[i]] || { kind: 'simian', zoom: 1, dx: 0, dy: 0 };
     const mirror = state.layout === 'grid' && i === 3;
     let img = null;
     if (slot.kind === 'boulevard') img = images.boulevard;
@@ -298,12 +242,14 @@ export function drawCoverBase(ctx, w, h, state, images) {
     else if (slot.kind === 'upload') img = images.uploads.get(slotIdx[i]);
     if (img && img.complete && img.naturalWidth > 0) {
       drawPhotoCell(ctx, cell, w, h, img, slot, mirror);
+    } else if (slot.kind === 'simian') {
+      drawSimianCell(ctx, cell, w, h, grade, 100 + i * 17);
     } else {
-      drawProceduralCell(ctx, cell, w, h, state.grade || 'sunset', 100 + i * 17);
+      drawJungleCell(ctx, cell, w, h, grade, 100 + i * 17);
     }
     // Thin neon divider around each panel.
     ctx.save();
-    ctx.strokeStyle = 'rgba(255, 46, 166, 0.85)';
+    ctx.strokeStyle = grade === 'neon' ? 'rgba(57, 255, 136, 0.85)' : 'rgba(255, 46, 166, 0.85)';
     ctx.lineWidth = Math.max(2, w * 0.004);
     clipCell(ctx, cell, w, h);
     ctx.stroke();
@@ -312,8 +258,8 @@ export function drawCoverBase(ctx, w, h, state, images) {
   // The slash layout's signature: a hot neon edge along the diagonal cut.
   if (state.layout === 'slash') {
     ctx.save();
-    ctx.strokeStyle = '#ff2ea6';
-    ctx.shadowColor = '#ff2ea6';
+    ctx.strokeStyle = EDGE_COLOR[grade] || EDGE_COLOR.neon;
+    ctx.shadowColor = EDGE_COLOR[grade] || EDGE_COLOR.neon;
     ctx.shadowBlur = Math.max(8, w * 0.012);
     ctx.lineWidth = Math.max(4, w * 0.006);
     ctx.beginPath();
@@ -322,5 +268,5 @@ export function drawCoverBase(ctx, w, h, state, images) {
     ctx.stroke();
     ctx.restore();
   }
-  chromeCaption(ctx, w, h, fitCaption(state.caption), fitSubtitle(state.subtitle));
+  chromeCaption(ctx, w, h, fitCaption(state.caption), fitSubtitle(state.subtitle), grade);
 }

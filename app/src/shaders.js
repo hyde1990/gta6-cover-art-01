@@ -1,7 +1,9 @@
-// Vice Cover Studio round 5 — GLSL sources for the WebGL2 grade pipeline.
+// Vice Cover Studio round 6 — GLSL sources for the WebGL2 grade pipeline.
 // Kept as plain strings (no fetch, no extra files): glfx.js compiles them.
 // The pipeline is: base cover texture -> bright-pass -> 2x blur (bloom) ->
-// composite (bloom + sunset grade + halftone + grain + light sweep + vignette).
+// composite (bloom + grade + halftone + grain + light sweep + vignette +
+// drifting data particles). Round 6 adds grade 3, neon: the chrome-green
+// and magenta grade of the Simian Cyber World.
 
 export const VERT_SRC = `#version 300 es
 precision highp float;
@@ -50,9 +52,9 @@ void main() {
 }
 `;
 
-// The final grade. uGrade: 0 sunset, 1 midnight, 2 ink. uTime drives the
-// animated light sweep in the live preview (frozen at 0 for PNG exports).
-// uSweep 0 hides the sweep entirely.
+// The final grade. uGrade: 0 sunset, 1 midnight, 2 ink, 3 neon. uTime
+// drives the animated light sweep and the drifting data particles in the
+// live preview (frozen at 0 for PNG exports). uSweep 0 hides the sweep.
 export const COMPOSITE_SRC = `#version 300 es
 precision highp float;
 in vec2 vUV;
@@ -69,9 +71,10 @@ float hash(vec2 p) {
   return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
 }
 
-// Warm sunset grade: lift the shadows toward violet, push the mids toward
-// amber, keep the highlights hot. Midnight cools everything toward violet;
-// ink crushes it toward a silver duotone.
+// Sunset is warm amber; midnight cools toward violet; ink crushes to a
+// silver duotone; neon — the Simian grade — lifts the shadows toward
+// deep violet, pushes the mids toward chrome green and keeps the hot
+// highlights magenta.
 vec3 gradeColor(vec3 c) {
   float l = dot(c, vec3(0.299, 0.587, 0.114));
   if (uGrade == 1) {
@@ -79,6 +82,14 @@ vec3 gradeColor(vec3 c) {
   }
   if (uGrade == 2) {
     return vec3(l) * vec3(1.05, 1.0, 0.95);
+  }
+  if (uGrade == 3) {
+    vec3 shadow = vec3(0.06, 0.02, 0.16);
+    vec3 mid = vec3(0.10, 0.85, 0.45);
+    vec3 hi = vec3(1.0, 0.45, 0.75);
+    vec3 graded = mix(shadow, mid, smoothstep(0.0, 0.55, l));
+    graded = mix(graded, hi, smoothstep(0.6, 1.0, l));
+    return graded * 0.5 + c * 0.55;
   }
   vec3 shadow = vec3(0.16, 0.05, 0.30);
   vec3 mid = vec3(1.0, 0.55, 0.25);
@@ -88,10 +99,33 @@ vec3 gradeColor(vec3 c) {
   return graded * 0.55 + c * 0.55;
 }
 
+// One drifting data particle: a small glowing dot whose cell is hashed,
+// so the field looks random but is the same at any frozen time.
+vec3 dataParticles(vec2 uv, float time) {
+  vec2 grid = vec2(20.0, 13.0);
+  vec2 cell = floor(uv * grid);
+  vec2 f = fract(uv * grid);
+  float h = hash(cell);
+  // Only some cells carry a particle; the rest stay dark.
+  if (h < 0.68) return vec3(0.0);
+  vec2 centre = vec2(fract(h * 7.31), fract(h * 3.77));
+  // The particle drifts upward as time moves, and wraps inside its cell.
+  centre.y = fract(centre.y - time * 0.045 * (0.4 + h * 0.6));
+  float d = length(f - centre);
+  float dotGlow = smoothstep(0.16, 0.0, d) * (0.5 + 0.5 * h);
+  vec3 tint = mix(vec3(0.13, 1.0, 0.53), vec3(0.13, 0.83, 0.93), fract(h * 5.13));
+  return tint * dotGlow * 0.4;
+}
+
 void main() {
   vec3 base = texture(uTex, vUV).rgb;
   vec3 bloom = texture(uBloom, vUV).rgb;
   vec3 c = gradeColor(base) + bloom * uGlow;
+
+  // Drifting data particles over the whole cover (preview only in
+  // motion; at uTime 0 they sit in their hashed cells, so exports stay
+  // byte-stable).
+  c += dataParticles(vUV, uTime);
 
   // Halftone dots over the dark title band at the bottom of the cover.
   float band = smoothstep(0.80, 0.84, vUV.y);
@@ -101,7 +135,7 @@ void main() {
   float dotAmt = smoothstep(dotR, dotR - 0.12, length(cell));
   c = mix(c, c * 0.82 + vec3(0.10, 0.04, 0.14) * 0.18, dotAmt * band * 0.55);
 
-  // A diagonal shaft of sunset light that drifts across the cover.
+  // A diagonal shaft of light that drifts across the cover.
   if (uSweep > 0.5) {
     float sweepX = -0.35 + mod(uTime * 0.14, 1.7);
     float d = abs((vUV.x - vUV.y * 0.35) - sweepX);

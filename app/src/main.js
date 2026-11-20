@@ -1,7 +1,9 @@
-// Vice Cover Studio round 5: wires the page. State, history (undo/redo),
+// Vice Cover Studio round 6: wires the page. State, history (undo/redo),
 // panel drag, photo upload, caption editing, the WebGL2 grade pipeline and
 // PNG export. A `?shot=` query sets up a fixed scene for a screenshot
-// instead (./shots.js).
+// instead (./shots.js). Round 6 defaults to the Simian Cyber World: the
+// Slash layout, a Simian Prime hero panel, the neon grade and a SIMIAN
+// CITY caption — the user can swap any panel for their own photo.
 import { drawCoverBase, applyFallbackGrade, layoutCells, cellsFor } from './cover.js';
 import { GradePipeline } from './glfx.js';
 import { runShot } from './shots.js';
@@ -10,13 +12,13 @@ import { EXPORT_SIZES, clampSlot } from './geometry.js';
 export const DEFAULT_STATE = {
   layout: 'slash',
   slots: [
-    { kind: 'pier', zoom: 1, dx: 0, dy: 0 },
-    { kind: 'boulevard', zoom: 1, dx: 0, dy: 0 },
+    { kind: 'simian', zoom: 1, dx: 0, dy: 0 },
+    { kind: 'procedural', zoom: 1, dx: 0, dy: 0 },
     { kind: 'procedural', zoom: 1, dx: 0, dy: 0 },
   ],
-  caption: 'Vice City',
-  subtitle: 'Neon Nights',
-  grade: 'sunset',
+  caption: 'Simian City',
+  subtitle: 'Cyber Jungle Nights',
+  grade: 'neon',
   glow: 0.7,
   sweep: true,
 };
@@ -144,7 +146,7 @@ function render(time) {
       grade: state.grade,
       glow: state.glow,
       time,
-      sweep: state.sweep && !shotMode ? true : state.sweep,
+      sweep: state.sweep,
     }, baseVersion);
   } else {
     const ctx = canvas.getContext('2d');
@@ -162,7 +164,7 @@ function render(time) {
     if (cellIndex >= 0) {
       const c = cells[cellIndex];
       ctx.save();
-      ctx.strokeStyle = '#ff2ea6';
+      ctx.strokeStyle = '#39ff88';
       ctx.lineWidth = Math.max(3, w * 0.005);
       ctx.setLineDash([18, 10]);
       if (c.poly) {
@@ -245,9 +247,9 @@ window.__viceStudio = {
 function downloadExport(w, h) {
   const a = document.createElement('a');
   a.href = exportCover(w, h);
-  a.download = `vice-cover-${w}x${h}.png`;
+  a.download = `simian-cover-${w}x${h}.png`;
   a.click();
-  setStatus(`Saved vice-cover-${w}x${h}.png`);
+  setStatus(`Saved simian-cover-${w}x${h}.png`);
 }
 
 async function initImages() {
@@ -432,8 +434,8 @@ function wireControls() {
   });
 }
 
-// The live preview animates the sunset light sweep; shots and exports use
-// a frozen frame instead, so they are reproducible.
+// The live preview animates the sunset light sweep and the data particles;
+// shots and exports use a frozen frame instead, so they are reproducible.
 function animate(start) {
   if (shotMode) return;
   const tick = (now) => {
