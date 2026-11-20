@@ -1,7 +1,8 @@
 // Fixed scenes for screenshots: ?shot=editor shows the page with a sample
 // photo; ?shot=cover shows the cover alone. `photo` picks the sample
 // (samples/<photo>.jpg), `caption` the words, `layout` and `grade` the look,
-// `subtitle` the neon line. window.__shotReady is set once painted.
+// `subtitle` the neon line, `glow` the bloom strength. The frame is frozen
+// (time 0), so the shot is reproducible. window.__shotReady is set once painted.
 export async function runShot(shot, query, app) {
   const { state, render, applyState, syncControls } = app;
   if (shot === 'cover') {
@@ -21,14 +22,18 @@ export async function runShot(shot, query, app) {
   const subtitle = query.get('subtitle');
   if (subtitle !== null) next.subtitle = subtitle;
   const layout = query.get('layout');
-  if (layout === 'trio' || layout === 'duo' || layout === 'single' || layout === 'grid') {
+  if (layout === 'trio' || layout === 'duo' || layout === 'single' || layout === 'grid' || layout === 'slash') {
     next.layout = layout;
   }
   const grade = query.get('grade');
   if (grade === 'sunset' || grade === 'midnight' || grade === 'ink') next.grade = grade;
+  const glow = query.get('glow');
+  if (glow !== null && !Number.isNaN(Number(glow))) {
+    next.glow = Math.max(0, Math.min(1, Number(glow)));
+  }
   applyState(next);
   syncControls();
-  render();
+  render(0);
   // Let the canvas paint twice before signalling readiness.
   await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
   window.__shotReady = true;

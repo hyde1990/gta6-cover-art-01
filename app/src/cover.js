@@ -1,37 +1,16 @@
-// Drawing engine for Vice Cover Studio. Everything is painted on one canvas:
-// a procedural sunset (or midnight / ink) backdrop, the layout's photo panels
-// with per-panel crop + zoom + pan, a warm neon grade, a halftone title band,
-// a vignette and a light grain pass, then the big poster caption and subtitle.
+// Vice Cover Studio round 5 — the 2D composition engine.
 //
-// No network, no fonts to download: only system fonts and canvas gradients.
+// This paints the cover's base image on a plain canvas: a procedural sunset
+// (or midnight / ink) backdrop, the layout's photo panels with per-panel crop
+// + zoom + pan, a chrome poster caption and a neon subtitle on the title band.
+// The GPU grade (bloom, halftone, grain, light sweep, vignette) runs on top
+// of this in glfx.js; when WebGL2 is missing, applyFallbackGrade gives a
+// lighter 2D version of the same finish.
+//
+// No network, no downloaded fonts: only system fonts and canvas gradients.
+import { layoutCells, cellsFor, cellBounds, fitCaption, fitSubtitle, clampSlot } from './geometry.js';
 
-export const LAYOUTS = {
-  trio: [
-    { x: 0, y: 0, w: 0.62, h: 1 },
-    { x: 0.62, y: 0, w: 0.38, h: 0.5 },
-    { x: 0.62, y: 0.5, w: 0.38, h: 0.5 },
-  ],
-  duo: [
-    { x: 0, y: 0, w: 0.5, h: 1 },
-    { x: 0.5, y: 0, w: 0.5, h: 1 },
-  ],
-  single: [{ x: 0, y: 0, w: 1, h: 1 }],
-  grid: [
-    { x: 0, y: 0, w: 0.5, h: 0.5 },
-    { x: 0.5, y: 0, w: 0.5, h: 0.5 },
-    { x: 0, y: 0.5, w: 0.5, h: 0.5 },
-    { x: 0.5, y: 0.5, w: 0.5, h: 0.5 },
-  ],
-};
-
-// Which photo slot fills each cell. Grid reuses slot 0 in the fourth cell
-// with a mirrored crop, so three slots still fill four cells.
-export function cellsFor(layout) {
-  if (layout === 'trio') return [0, 1, 2];
-  if (layout === 'duo') return [0, 1];
-  if (layout === 'single') return [0];
-  return [0, 1, 2, 0];
-}
+export { layoutCells, cellsFor };
 
 const BACKDROPS = {
   sunset: {
@@ -40,6 +19,7 @@ const BACKDROPS = {
     glow: 'rgba(255, 122, 61, 0.55)',
     ground: '#160a2e',
     band: '#12081f',
+    tint: 'rgba(255, 110, 60, 0.10)',
   },
   midnight: {
     sky: ['#050510', '#141433', '#2b2a6b', '#5b3a9e', '#8a4fb8'],
@@ -47,6 +27,7 @@ const BACKDROPS = {
     glow: 'rgba(120, 110, 255, 0.45)',
     ground: '#0a0a18',
     band: '#080816',
+    tint: 'rgba(80, 60, 220, 0.08)',
   },
   ink: {
     sky: ['#000000', '#101010', '#242424', '#3d3d3d', '#5a5a5a'],
@@ -54,6 +35,7 @@ const BACKDROPS = {
     glow: 'rgba(255, 255, 255, 0.28)',
     ground: '#000000',
     band: '#050505',
+    tint: 'rgba(255, 255, 255, 0.04)',
   },
 };
 
@@ -78,7 +60,6 @@ function drawSkyline(ctx, w, h, color, seed) {
     const bw = w * (0.04 + rnd() * 0.07);
     const bh = h * (0.06 + rnd() * 0.16);
     ctx.fillRect(x, base - bh, bw, bh + h * 0.22);
-    // A lit window or two on some buildings.
     if (rnd() > 0.5) {
       ctx.fillStyle = 'rgba(255, 214, 130, 0.85)';
       ctx.fillRect(x + bw * 0.3, base - bh + bh * 0.3, 2, 3);
@@ -131,17 +112,34 @@ export function drawBackdrop(ctx, w, h, grade) {
   drawSkyline(ctx, w, h, p.band, 97);
 }
 
-function drawPhotoCell(ctx, x, y, w, h, img, slot, mirror) {
-  ctx.save();
+function clipCell(ctx, cell, w, h) {
   ctx.beginPath();
-  ctx.rect(x, y, w, h);
+  if (cell.poly) {
+    cell.poly.forEach(([px, py], i) => {
+      if (i === 0) ctx.moveTo(px * w, py * h);
+      else ctx.lineTo(px * w, py * h);
+    });
+    ctx.closePath();
+  } else {
+    ctx.rect(cell.x * w, cell.y * h, cell.w * w, cell.h * h);
+  }
   ctx.clip();
-  const zoom = slot.zoom || 1;
-  const scale = Math.max(w / img.width, h / img.height) * zoom;
+}
+
+function drawPhotoCell(ctx, cell, w, h, img, slot, mirror) {
+  const b = cellBounds(cell);
+  const x = b.x * w;
+  const y = b.y * h;
+  const cw = b.w * w;
+  const ch = b.h * h;
+  ctx.save();
+  clipCell(ctx, cell, w, h);
+  const s = clampSlot(slot);
+  const scale = Math.max(cw / img.width, ch / img.height) * s.zoom;
   const dw = img.width * scale;
   const dh = img.height * scale;
-  const cx = x + w / 2 + (slot.dx || 0) * w * 0.1;
-  const cy = y + h / 2 + (slot.dy || 0) * h * 0.1;
+  const cx = x + cw / 2 + s.dx * cw * 0.1;
+  const cy = y + ch / 2 + s.dy * ch * 0.1;
   if (mirror) {
     ctx.translate(cx, cy);
     ctx.scale(-1, 1);
@@ -152,35 +150,34 @@ function drawPhotoCell(ctx, x, y, w, h, img, slot, mirror) {
   ctx.restore();
 }
 
-function drawProceduralCell(ctx, x, y, w, h, grade, seed) {
+function drawProceduralCell(ctx, cell, w, h, grade, seed) {
+  const b = cellBounds(cell);
   ctx.save();
-  ctx.beginPath();
-  ctx.rect(x, y, w, h);
-  ctx.clip();
-  ctx.translate(x, y);
-  drawBackdrop(ctx, w, h, grade);
-  // A palm silhouette for the procedural panel: a curved trunk with fronds
-  // that arc out and droop, so it reads as a palm, not a star.
+  clipCell(ctx, cell, w, h);
+  ctx.translate(b.x * w, b.y * h);
+  drawBackdrop(ctx, b.w * w, b.h * h, grade);
+  // A palm silhouette: a curved trunk with fronds that arc out and droop.
   const rnd = mulberry32(seed);
-  const crownX = w * 0.66;
-  const crownY = h * 0.38;
+  const pw = b.w * w;
+  const ph = b.h * h;
+  const crownX = pw * 0.66;
+  const crownY = ph * 0.38;
   ctx.strokeStyle = 'rgba(10, 4, 24, 0.92)';
   ctx.lineCap = 'round';
-  ctx.lineWidth = Math.max(4, w * 0.022);
+  ctx.lineWidth = Math.max(4, pw * 0.022);
   ctx.beginPath();
-  ctx.moveTo(w * 0.86, h);
-  ctx.quadraticCurveTo(w * 0.84, h * 0.62, crownX, crownY);
+  ctx.moveTo(pw * 0.86, ph);
+  ctx.quadraticCurveTo(pw * 0.84, ph * 0.62, crownX, crownY);
   ctx.stroke();
-  ctx.lineWidth = Math.max(2, w * 0.008);
+  ctx.lineWidth = Math.max(2, pw * 0.008);
   const fronds = 6;
   for (let i = 0; i < fronds; i++) {
-    // Spread from up-left to up-right, each frond arcing out then drooping.
     const a = Math.PI * (1.08 + (i / (fronds - 1)) * 0.84);
-    const len = w * (0.3 + rnd() * 0.08);
+    const len = pw * (0.3 + rnd() * 0.08);
     const tipX = crownX + Math.cos(a) * len;
-    const tipY = crownY + Math.sin(a) * h * 0.22 + h * 0.16;
+    const tipY = crownY + Math.sin(a) * ph * 0.22 + ph * 0.16;
     const ctrlX = crownX + Math.cos(a) * len * 0.55;
-    const ctrlY = crownY + Math.sin(a) * h * 0.3 - h * 0.05;
+    const ctrlY = crownY + Math.sin(a) * ph * 0.3 - ph * 0.05;
     ctx.beginPath();
     ctx.moveTo(crownX, crownY);
     ctx.quadraticCurveTo(ctrlX, ctrlY, tipX, tipY);
@@ -189,44 +186,73 @@ function drawProceduralCell(ctx, x, y, w, h, grade, seed) {
   ctx.restore();
 }
 
-function halftoneBand(ctx, w, h, color) {
+// Chrome-foil poster lettering: the caption is painted once on a small
+// offscreen canvas, so the specular stripe only ever lands on the letters.
+function chromeCaption(ctx, w, h, caption, subtitle) {
   const bandH = h * 0.17;
   const y0 = h - bandH;
-  ctx.fillStyle = color;
+  ctx.fillStyle = 'rgba(14, 6, 26, 0.92)';
   ctx.fillRect(0, y0, w, bandH);
-  ctx.fillStyle = 'rgba(255,255,255,0.16)';
-  const step = Math.max(7, w * 0.011);
-  for (let y = y0 + step / 2; y < h; y += step) {
-    const row = Math.round((y - y0) / step);
-    for (let x = step / 2 + (row % 2 ? step / 2 : 0); x < w; x += step) {
-      const r = Math.max(1, step * 0.16 * (1 + ((x + y) % 3) * 0.25));
-      ctx.beginPath();
-      ctx.arc(x, y, r, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  }
-}
 
-function vignette(ctx, w, h) {
-  const g = ctx.createRadialGradient(
-    w / 2, h / 2, Math.min(w, h) * 0.35,
-    w / 2, h / 2, Math.max(w, h) * 0.75,
-  );
-  g.addColorStop(0, 'rgba(0,0,0,0)');
-  g.addColorStop(1, 'rgba(8,2,20,0.5)');
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, w, h);
+  const capSize = Math.min(w * 0.085, bandH * 0.52);
+  const text = document.createElement('canvas');
+  text.width = Math.max(2, Math.ceil(w));
+  text.height = Math.max(2, Math.ceil(bandH));
+  const t = text.getContext('2d');
+  t.textAlign = 'center';
+  t.textBaseline = 'middle';
+  t.font = `900 ${capSize}px "Arial Black", Impact, sans-serif`;
+  t.lineJoin = 'round';
+  const cx = w / 2;
+  const cy = bandH * 0.34;
+  const foil = t.createLinearGradient(0, cy - capSize / 2, 0, cy + capSize / 2);
+  foil.addColorStop(0, '#ffffff');
+  foil.addColorStop(0.28, '#ffe9a8');
+  foil.addColorStop(0.48, '#ffb347');
+  foil.addColorStop(0.62, '#ff4d6d');
+  foil.addColorStop(0.8, '#c62b8a');
+  foil.addColorStop(1, '#7b1e6e');
+  t.lineWidth = capSize * 0.16;
+  t.strokeStyle = '#12081f';
+  t.strokeText(caption, cx, cy);
+  t.fillStyle = foil;
+  t.fillText(caption, cx, cy);
+  // One hard specular slash across the foil, clipped to the letters.
+  t.save();
+  t.globalCompositeOperation = 'source-atop';
+  t.translate(cx, cy);
+  t.rotate(-0.5);
+  const stripe = t.createLinearGradient(-capSize * 0.4, 0, capSize * 0.4, 0);
+  stripe.addColorStop(0, 'rgba(255,255,255,0)');
+  stripe.addColorStop(0.5, 'rgba(255,255,255,0.85)');
+  stripe.addColorStop(1, 'rgba(255,255,255,0)');
+  t.fillStyle = stripe;
+  t.fillRect(-capSize * 0.4, -capSize, capSize * 0.8, capSize * 2);
+  t.restore();
+  ctx.drawImage(text, 0, y0);
+
+  // Neon script subtitle, kept inside the band so it never clips.
+  const subSize = Math.min(w * 0.042, bandH * 0.3);
+  ctx.save();
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = `italic bold ${subSize}px "Brush Script MT", "Segoe Script", cursive`;
+  ctx.shadowColor = '#ff2ea6';
+  ctx.shadowBlur = subSize * 0.55;
+  ctx.fillStyle = '#ffe9fb';
+  ctx.fillText(subtitle, cx, y0 + bandH * 0.78);
+  ctx.restore();
 }
 
 let grainTile = null;
-function grain(ctx, w, h) {
+function grainPattern(ctx) {
   if (!grainTile) {
     grainTile = document.createElement('canvas');
     grainTile.width = 128;
     grainTile.height = 128;
     const g = grainTile.getContext('2d');
     const img = g.createImageData(128, 128);
-    const rnd = mulberry32(20261119);
+    const rnd = mulberry32(20261120);
     for (let i = 0; i < img.data.length; i += 4) {
       const v = Math.floor(rnd() * 255);
       img.data[i] = v;
@@ -236,53 +262,34 @@ function grain(ctx, w, h) {
     }
     g.putImageData(img, 0, 0);
   }
-  const pattern = ctx.createPattern(grainTile, 'repeat');
-  ctx.fillStyle = pattern;
+  return ctx.createPattern(grainTile, 'repeat');
+}
+
+// Fallback finish for browsers without WebGL2: warm tint, vignette, grain.
+export function applyFallbackGrade(ctx, w, h, grade) {
+  const p = BACKDROPS[grade] || BACKDROPS.sunset;
+  ctx.fillStyle = p.tint;
+  ctx.fillRect(0, 0, w, h);
+  const g = ctx.createRadialGradient(
+    w / 2, h / 2, Math.min(w, h) * 0.35,
+    w / 2, h / 2, Math.max(w, h) * 0.75,
+  );
+  g.addColorStop(0, 'rgba(0,0,0,0)');
+  g.addColorStop(1, 'rgba(8,2,20,0.5)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, w, h);
+  ctx.fillStyle = grainPattern(ctx);
   ctx.fillRect(0, 0, w, h);
 }
 
-function posterText(ctx, w, h, caption, subtitle) {
-  const bandH = h * 0.17;
-  const y0 = h - bandH;
-  ctx.save();
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  const capSize = Math.min(w * 0.085, bandH * 0.52);
-  ctx.font = `900 ${capSize}px "Arial Black", Impact, sans-serif`;
-  ctx.lineJoin = 'round';
-  const cx = w / 2;
-  const cy = y0 + bandH * 0.34;
-  ctx.lineWidth = capSize * 0.16;
-  ctx.strokeStyle = '#12081f';
-  ctx.strokeText(caption.toUpperCase(), cx, cy);
-  const grad = ctx.createLinearGradient(0, cy - capSize / 2, 0, cy + capSize / 2);
-  grad.addColorStop(0, '#fff7d6');
-  grad.addColorStop(0.55, '#ffb347');
-  grad.addColorStop(1, '#ff4d6d');
-  ctx.fillStyle = grad;
-  ctx.fillText(caption.toUpperCase(), cx, cy);
-  // Neon script subtitle, kept inside the band so it never clips.
-  const subSize = Math.min(w * 0.042, bandH * 0.3);
-  ctx.font = `italic bold ${subSize}px "Brush Script MT", "Segoe Script", cursive`;
-  ctx.shadowColor = '#ff2ea6';
-  ctx.shadowBlur = subSize * 0.55;
-  ctx.fillStyle = '#ffe9fb';
-  ctx.fillText(subtitle, cx, y0 + bandH * 0.78);
-  ctx.restore();
-}
-
-// state: { layout, slots:[{kind, zoom, dx, dy}], caption, subtitle, grade }
+// state: { layout, slots:[{kind, zoom, dx, dy}], caption, subtitle, grade, glow }
 // images: { boulevard: HTMLImageElement, pier: HTMLImageElement, uploads: Map }
-export function drawCover(ctx, w, h, state, images) {
+export function drawCoverBase(ctx, w, h, state, images) {
   ctx.clearRect(0, 0, w, h);
   drawBackdrop(ctx, w, h, state.grade || 'sunset');
-  const cells = LAYOUTS[state.layout] || LAYOUTS.trio;
+  const cells = layoutCells(state.layout);
   const slotIdx = cellsFor(state.layout);
   cells.forEach((cell, i) => {
-    const cx = cell.x * w;
-    const cy = cell.y * h;
-    const cw = cell.w * w;
-    const ch = cell.h * h;
     const slot = state.slots[slotIdx[i]] || { kind: 'procedural', zoom: 1, dx: 0, dy: 0 };
     const mirror = state.layout === 'grid' && i === 3;
     let img = null;
@@ -290,22 +297,30 @@ export function drawCover(ctx, w, h, state, images) {
     else if (slot.kind === 'pier') img = images.pier;
     else if (slot.kind === 'upload') img = images.uploads.get(slotIdx[i]);
     if (img && img.complete && img.naturalWidth > 0) {
-      drawPhotoCell(ctx, cx, cy, cw, ch, img, slot, mirror);
+      drawPhotoCell(ctx, cell, w, h, img, slot, mirror);
     } else {
-      drawProceduralCell(ctx, cx, cy, cw, ch, state.grade || 'sunset', 100 + i * 17);
+      drawProceduralCell(ctx, cell, w, h, state.grade || 'sunset', 100 + i * 17);
     }
-    // Thin neon divider between panels.
+    // Thin neon divider around each panel.
+    ctx.save();
     ctx.strokeStyle = 'rgba(255, 46, 166, 0.85)';
     ctx.lineWidth = Math.max(2, w * 0.004);
-    ctx.strokeRect(cx, cy, cw, ch);
+    clipCell(ctx, cell, w, h);
+    ctx.stroke();
+    ctx.restore();
   });
-  // Warm neon grade over everything.
-  ctx.fillStyle = state.grade === 'midnight'
-    ? 'rgba(80, 60, 220, 0.08)'
-    : state.grade === 'ink' ? 'rgba(255,255,255,0.04)' : 'rgba(255, 110, 60, 0.10)';
-  ctx.fillRect(0, 0, w, h);
-  halftoneBand(ctx, w, h, 'rgba(14, 6, 26, 0.92)');
-  vignette(ctx, w, h);
-  grain(ctx, w, h);
-  posterText(ctx, w, h, state.caption || 'VICE CITY', state.subtitle || 'Sunset Heist');
+  // The slash layout's signature: a hot neon edge along the diagonal cut.
+  if (state.layout === 'slash') {
+    ctx.save();
+    ctx.strokeStyle = '#ff2ea6';
+    ctx.shadowColor = '#ff2ea6';
+    ctx.shadowBlur = Math.max(8, w * 0.012);
+    ctx.lineWidth = Math.max(4, w * 0.006);
+    ctx.beginPath();
+    ctx.moveTo(0.68 * w, 0.32 * h);
+    ctx.lineTo(0.32 * w, 0.68 * h);
+    ctx.stroke();
+    ctx.restore();
+  }
+  chromeCaption(ctx, w, h, fitCaption(state.caption), fitSubtitle(state.subtitle));
 }

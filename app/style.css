@@ -12,8 +12,10 @@ button:hover { border-color: #ff2ea6; }
 button.active { background: #ff2ea6; border-color: #ff2ea6; color: #fff; }
 button:disabled { opacity: 0.4; cursor: default; }
 label { display: flex; flex-direction: column; gap: 6px; font-weight: 600; font-size: 14px; }
+label.check { flex-direction: row; align-items: center; gap: 8px; font-size: 14px; }
 input[type=text] { font: inherit; padding: 8px 10px; border: 1px solid #5b3a9e; border-radius: 8px; background: #1c0f33; color: #f3ecff; }
 input[type=range] { width: 100%; accent-color: #ff2ea6; }
+input[type=checkbox] { accent-color: #ff2ea6; width: 16px; height: 16px; }
 .upload { font-size: 14px; }
 .upload input { font: inherit; color: #c9b8e8; }
 .hint { margin: 0; font-size: 13px; color: #c9b8e8; }

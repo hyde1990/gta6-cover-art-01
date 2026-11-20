@@ -3,42 +3,58 @@
 // The app is this directory's app/ folder: plain static files a desktop browser
 // loads offline (app/index.html and its ES modules, no library and no network
 // request). It turns a photo and a caption into GTA 6-style multi-panel cover
-// art in a Vice City neon-sunset look: four layouts (Trio, Duo, Single, Grid
-// 2x2), three photo slots with per-panel crop, zoom and drag, an editable poster
-// caption with a neon script subtitle on a halftone band, and PNG export at
-// 1080x1080, 1080x1350 and 1920x1080. Its two sample photos (app/samples/) were
-// made for make.fun with an image model and are free to use.
+// art in a Vice City neon-sunset look. Round 5 rebuilt the renderer on WebGL2:
+// the 2D engine paints the panels and the chrome-foil caption, then a GLSL
+// pipeline adds the neon bloom, the sunset grade, halftone, film grain and a
+// drifting light sweep (frozen for exports, so a PNG is reproducible). Five
+// layouts — the new diagonal Slash split plus Trio, Duo, Single and Grid 2x2 —
+// three photo slots with per-panel crop, zoom and drag, an editable poster
+// caption with a neon script subtitle, and PNG export at 1080x1080,
+// 1080x1350 and 1920x1080. Its two sample photos (app/samples/) were made
+// for make.fun with an image model and are free to use.
 //
 // This program hands the entry in: it copies app/ and screenshots/ from beside
 // this file to /output and writes /output/dossier.json, the summary the judge
 // reads, with the vendored make.fun library. Before copying, it checks that all
-// four screenshots the entry promises are actually present, so a missing shot
-// fails loudly here instead of reaching the judge half-built.
+// four screenshots the entry promises are actually present and inside the
+// gate's size cap, so a missing or oversized shot fails loudly here instead of
+// reaching the judge half-built.
 //
 // Serve it locally with `node serve.ts`, then open http://localhost:8080.
 // Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for /output:
 //   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
 
-import { cpSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildDossier } from './vendor/makefun-app.ts';
 
-// Entry identity, written for this round 4 build: the title the entry is
+// Entry identity, written for this round 5 build: the title the entry is
 // submitted under, and the build's own version stamp.
 const VICE_COVER_STUDIO_TITLE = 'Vice Cover Studio';
-const VICE_COVER_STUDIO_VERSION = '4.0.0';
+const VICE_COVER_STUDIO_VERSION = '5.0.0';
 // The four screenshots this entry promises, in the order shots.json names them.
 const VICE_COVER_STUDIO_SHOTS = ['1-cover.jpg', '2-editor.jpg', '3-cover.jpg', '4-cover.jpg'];
+// The gate's per-screenshot cap (256 KiB), checked here before the dossier
+// is built so an oversized shot can never slip through.
+const VICE_COVER_STUDIO_SHOT_MAX_BYTES = 262144;
 
 const here = fileURLToPath(new URL('.', import.meta.url));
 const out = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
 
-// Refuse to hand in a half-built entry: every promised screenshot must exist.
+// Refuse to hand in a half-built entry: every promised screenshot must exist
+// and fit the gate's size cap.
 for (const shot of VICE_COVER_STUDIO_SHOTS) {
-  if (!existsSync(join(here, 'screenshots', shot))) {
+  const shotPath = join(here, 'screenshots', shot);
+  if (!existsSync(shotPath)) {
     throw new Error(
       `${VICE_COVER_STUDIO_TITLE} v${VICE_COVER_STUDIO_VERSION} is missing its screenshot ${shot}`,
+    );
+  }
+  const shotBytes = statSync(shotPath).size;
+  if (shotBytes > VICE_COVER_STUDIO_SHOT_MAX_BYTES) {
+    throw new Error(
+      `${VICE_COVER_STUDIO_TITLE} v${VICE_COVER_STUDIO_VERSION} screenshot ${shot} is ${shotBytes} bytes, over the 262144 byte cap`,
     );
   }
 }
